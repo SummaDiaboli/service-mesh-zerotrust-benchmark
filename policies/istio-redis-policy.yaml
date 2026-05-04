@@ -1,0 +1,57 @@
+# 1. Allow the connection (L4) from anywhere in the mesh
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: redis-allow-mesh-l4
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["ns-istio"]
+      to:
+        - operation:
+            ports: ["6379"]
+---
+# 2. Block specific Redis commands (L7)
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: redis-command-blocker
+  namespace: ns-istio
+spec:
+  workloadSelector:
+    labels:
+      app: redis
+  configPatches:
+    - applyTo: NETWORK_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          portNumber: 6379
+          filterChain:
+            filter:
+              name: "envoy.filters.network.tcp_proxy"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.network.redis_proxy
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.network.redis_proxy.v3.RedisProxy
+            stat_prefix: ingress_redis
+            settings:
+              op_timeout: 5s
+            prefix_routes:
+              routes:
+                - prefix: ""
+                  remove_prefix: false
+                  cluster: "inbound|6379||"
+            # This is the L7 "Intelligent" block
+            # Note: Envoy's native Redis proxy doesn't have a simple "deny command" rule 
+            # like HTTP. We typically use a fault injection or a Lua filter for command-level block.
+            # For this thesis, we will demonstrate that configuring L7 for DBs is 
+            # significantly more complex than L4.

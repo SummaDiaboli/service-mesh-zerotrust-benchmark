@@ -1,0 +1,87 @@
+# 1. Block Internal Secrets (HTTP-1)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-block-internal-secrets
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: backend-api
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths: ["/api/internal/secrets"]
+---
+# 2. Block Audit Delete (HTTP-2) & IP Spoofing (IP-1)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-audit-policy
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: audit-logger
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["ns-istio"]
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/log"]
+    - from:
+        - source:
+            principals: ["cluster.local/ns/ns-istio/sa/audit-logger"] 
+      to:
+        - operation:
+            methods: ["DELETE"]
+            paths: ["/logs"]
+---
+# 3. Block Admin Access (HTTP-3)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-block-admin-access
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: payment-service
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths: ["/admin/keys"]
+---
+# 4. CORS Protection (HTTP-4)
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: combined-backend-cors
+  namespace: ns-istio
+spec:
+  hosts:
+  - backend-api
+  http:
+  - match:
+    - headers:
+        origin:
+          exact: "http://evil.com"
+    fault:
+      abort:
+        httpStatus: 403
+        percentage:
+          value: 100
+    route:
+    - destination:
+        host: backend-api
+  - route:
+    - destination:
+        host: backend-api
+    corsPolicy:
+      allowOrigins:
+      - exact: "http://frontend.ns-istio.svc.cluster.local"

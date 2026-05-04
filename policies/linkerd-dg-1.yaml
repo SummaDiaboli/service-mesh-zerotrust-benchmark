@@ -1,0 +1,28 @@
+# 1. Define the Server for port 50051 (The gRPC port)
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: payment-grpc-50051
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: payment-service
+  port: 50051
+  proxyProtocol: gRPC # Pure L7 enforcement: reject non-gRPC traffic
+---
+# 2. Allow legitimate gRPC traffic (placeholder for full L7 mesh)
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-all-grpc
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: Server
+    name: payment-grpc-50051
+  requiredAuthenticationRefs:
+    - name: any-mesh-identity
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io

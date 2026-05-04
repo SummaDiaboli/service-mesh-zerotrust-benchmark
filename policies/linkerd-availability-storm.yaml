@@ -1,0 +1,55 @@
+# 1. Server for audit-logger
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: audit-logger-8080-storm
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: audit-logger
+  port: 8080
+  proxyProtocol: HTTP/1
+---
+# 2. Combined Storm Protection (L7 Timeouts)
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: audit-logger-storm-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: audit-logger-8080-storm
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - timeouts:
+        request: 1s # Strict timeout to fail fast during the storm
+      backendRefs:
+        - name: audit-logger
+          port: 8080
+---
+# 3. Authorization for the Storm Route
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-allow-audit-storm
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: audit-logger-storm-route
+  requiredAuthenticationRefs:
+    - name: any-mesh-auth-storm
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: any-mesh-auth-storm
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "*"

@@ -1,0 +1,14 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: block-internal-secrets
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: backend-api
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths: ["/api/internal/secrets"]

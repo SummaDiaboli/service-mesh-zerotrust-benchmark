@@ -1,0 +1,69 @@
+# 1. Server for payment-service port 80 - enables L7 inbound enforcement
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: egress-payment-80
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: payment-service
+  port: 80
+  proxyProtocol: HTTP/1
+---
+# 2. Allow only the legitimate /process endpoint inbound
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: egress-payment-process-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: egress-payment-80
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/process"
+---
+# 3. Authorize meshed identities to reach the allowed route
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: egress-allow-process
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: egress-payment-process-route
+  requiredAuthenticationRefs:
+    - name: egress-mesh-identity
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: egress-mesh-identity
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "*"
+---
+# Egress Limitation: Linkerd does not provide a native L7 mechanism to match
+# or block specific external FQDNs. Outbound traffic to uninstrumented external
+# endpoints is treated as opaque TCP by the proxy. No HTTPRoute or
+# AuthorizationPolicy primitive can close this gap. The inbound policy above
+# restricts what this service can receive, but cannot restrict what it sends
+# to external destinations. Complementary egress control requires a gateway
+# or CNI-level network policy outside the mesh enforcement boundary.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: linkerd-egress-placeholder
+  namespace: ns-linkerd
+data:
+  limitation: "Linkerd has no native L7 mechanism to block specific external FQDNs. Outbound egress is unrestricted at the mesh layer."

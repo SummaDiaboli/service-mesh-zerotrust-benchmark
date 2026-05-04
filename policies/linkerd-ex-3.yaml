@@ -1,0 +1,16 @@
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: audit-logger-timeout-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: audit-logger-8080
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - timeouts:
+        request: 2s # L7 Timeout: Kills slow requests
+      backendRefs:
+        - name: audit-logger
+          port: 8080

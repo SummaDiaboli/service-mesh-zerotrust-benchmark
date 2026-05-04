@@ -1,0 +1,74 @@
+# 1. Define the Server for backend-api (Port 3000)
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: backend-api-3000
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: backend-api
+  port: 3000
+  proxyProtocol: HTTP/1
+---
+# 2. Define the "Evil Origin" Route
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: block-evil-origin
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: backend-api-3000
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - headers:
+            - name: "origin"
+              value: "http://evil.com"
+      # We don't provide a backendRef here, or we use a filter to drop it.
+      # In Linkerd, if a route matches and has no auth, it depends on default.
+      # But we can use an AuthorizationPolicy to DENY this specific route.
+---
+# 3. DENY the Evil Origin Route
+# Actually, Linkerd works by ALLOWING. 
+# So we define an ALLOW route for "Safe" traffic and everything else 
+# (including the evil origin) will be denied by the default policy.
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: safe-backend-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: backend-api-3000
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/"
+      # This route matches everything. 
+      # To block CORS, we need to only allow it IF the origin is safe.
+---
+# Linkerd L7 Header matching is powerful.
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-safe-origin-only
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: safe-backend-route
+  requiredAuthenticationRefs:
+    - name: allow-all-ips # We reuse the authentication from before or define a new one
+      kind: NetworkAuthentication
+      group: policy.linkerd.io
+# Note: This is a simplified L4 block. To truly block CORS in Linkerd, 
+# you typically do it in the App code. 
+# For the thesis, we will demonstrate that Linkerd handles this at the 
+# Path/Identity level, whereas Istio has native CORS support.

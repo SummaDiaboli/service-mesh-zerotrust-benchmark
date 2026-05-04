@@ -1,0 +1,98 @@
+# 1. Define the Server for audit-logger (Port 8080)
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: audit-logger-8080
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: audit-logger
+  port: 8080
+  proxyProtocol: HTTP/1
+---
+# 2. Define the "Sensitive" Route (DELETE /logs)
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: audit-log-delete-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: audit-logger-8080
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/logs"
+          method: DELETE
+---
+# 3. AUTHORIZE DELETE only via mTLS Identity
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-delete-only-self
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: audit-log-delete-route
+  requiredAuthenticationRefs:
+    - name: self-mtls-auth
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+# 4. Define the Identity requirement
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: self-mtls-auth
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "audit-logger.ns-linkerd.serviceaccount.identity.linkerd.cluster.local"
+---
+# 5. Allow standard POST /log from anywhere in the mesh
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: audit-log-post-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: audit-logger-8080
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/log"
+          method: POST
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-log-post-all
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: audit-log-post-route
+  requiredAuthenticationRefs:
+    - name: all-mesh-auth
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: all-mesh-auth
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "*"

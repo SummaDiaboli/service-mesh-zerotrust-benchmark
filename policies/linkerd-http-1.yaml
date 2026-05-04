@@ -1,0 +1,60 @@
+# 1. Define the Server for backend-api (Port 3000)
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: backend-api-3000
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: backend-api
+  port: 3000
+  proxyProtocol: HTTP/1
+---
+# 2. Define the "Safe" Routes (Allow users API)
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: backend-users-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: backend-api-3000
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/api/users"
+---
+# 3. AUTHORIZE the "Safe" Route
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-backend-users
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: backend-users-route
+  requiredAuthenticationRefs:
+    - name: allow-all-ips
+      kind: NetworkAuthentication
+      group: policy.linkerd.io
+---
+# 4. Define "Anyone" (0.0.0.0/0) as a valid source
+apiVersion: policy.linkerd.io/v1alpha1
+kind: NetworkAuthentication
+metadata:
+  name: allow-all-ips
+  namespace: ns-linkerd
+spec:
+  networks:
+    - cidr: "0.0.0.0/0"
+---
+# 5. Default Deny (Implicit in Linkerd with Servers, but good to be explicit if needed)
+# Linkerd defaults to allowing all unauthenticated traffic unless 
+# a Server is defined. Once a Server is defined, it defaults to DENY 
+# for that port unless an AuthorizationPolicy matches.

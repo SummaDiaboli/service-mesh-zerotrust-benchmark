@@ -1,0 +1,195 @@
+# --- SHARED AUTHENTICATION ---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: NetworkAuthentication
+metadata:
+  name: allow-all-ips-combined
+  namespace: ns-linkerd
+spec:
+  networks:
+    - cidr: "0.0.0.0/0"
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: any-mesh-identity-combined
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "*"
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: self-audit-auth-combined
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "audit-logger.ns-linkerd.serviceaccount.identity.linkerd.cluster.local"
+
+# --- BACKEND-API (Port 3000) ---
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: combined-backend-3000
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: backend-api
+  port: 3000
+  proxyProtocol: HTTP/1
+  accessPolicy: deny # CRITICAL: This enables the L7 block for unauthorized paths
+---
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: combined-backend-safe-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: combined-backend-3000
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/api/users"
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-allow-backend-safe
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: combined-backend-safe-route
+  requiredAuthenticationRefs:
+    - name: allow-all-ips-combined
+      kind: NetworkAuthentication
+      group: policy.linkerd.io
+
+# --- AUDIT-LOGGER (Port 8080) ---
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: combined-audit-8080
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: audit-logger
+  port: 8080
+  proxyProtocol: HTTP/1
+  accessPolicy: deny
+---
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: combined-audit-post-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: combined-audit-8080
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/log"
+          method: POST
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-allow-audit-post
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: combined-audit-post-route
+  requiredAuthenticationRefs:
+    - name: any-mesh-identity-combined
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: combined-audit-delete-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: combined-audit-8080
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/logs"
+          method: DELETE
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-allow-audit-delete-self
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: combined-audit-delete-route
+  requiredAuthenticationRefs:
+    - name: self-audit-auth-combined
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+
+# --- PAYMENT-SERVICE (Port 8080) ---
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: combined-payment-8080
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: payment-service
+  port: 8080
+  proxyProtocol: HTTP/1
+  accessPolicy: deny # CRITICAL: This blocks /admin/keys by default
+---
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: combined-payment-process-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: combined-payment-8080
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/process"
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: combined-allow-payment-process
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: combined-payment-process-route
+  requiredAuthenticationRefs:
+    - name: allow-all-ips-combined
+      kind: NetworkAuthentication
+      group: policy.linkerd.io

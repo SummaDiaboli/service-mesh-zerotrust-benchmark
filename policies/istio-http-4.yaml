@@ -1,0 +1,27 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: backend-api-cors
+  namespace: ns-istio
+spec:
+  hosts:
+  - backend-api
+  http:
+  - match:
+    - headers:
+        origin:
+          exact: "http://evil.com"
+    fault:
+      abort:
+        httpStatus: 403
+        percentage:
+          value: 100
+    route:
+    - destination:
+        host: backend-api
+  - route:
+    - destination:
+        host: backend-api
+    corsPolicy:
+      allowOrigins:
+      - exact: "http://frontend.ns-istio.svc.cluster.local"

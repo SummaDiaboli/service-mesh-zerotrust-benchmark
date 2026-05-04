@@ -1,0 +1,15 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: block-audit-delete
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: audit-logger
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            methods: ["DELETE"]
+            paths: ["/logs"]

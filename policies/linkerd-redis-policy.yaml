@@ -1,0 +1,35 @@
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: redis-6379
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  port: 6379
+  proxyProtocol: opaque
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-all-mesh-to-redis
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: Server
+    name: redis-6379
+  requiredAuthenticationRefs:
+    - name: any-mesh-auth
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: any-mesh-auth
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "*"

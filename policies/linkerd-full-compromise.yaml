@@ -1,0 +1,130 @@
+# --- SHARED AUTHENTICATION ---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: NetworkAuthentication
+metadata:
+  name: full-allow-all-ips
+  namespace: ns-linkerd
+spec:
+  networks: [{cidr: "0.0.0.0/0"}]
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: full-backend-api-auth
+  namespace: ns-linkerd
+spec:
+  identities: ["backend-api.ns-linkerd.serviceaccount.identity.linkerd.cluster.local"]
+
+# --- BACKEND-API (Port 3000) ---
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: full-backend-3000
+  namespace: ns-linkerd
+spec:
+  podSelector: {matchLabels: {app: backend-api}}
+  port: 3000
+  proxyProtocol: HTTP/1
+  accessPolicy: deny
+---
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: full-backend-safe-route
+  namespace: ns-linkerd
+spec:
+  parentRefs: [{name: full-backend-3000, kind: Server, group: policy.linkerd.io}]
+  rules:
+    - matches: [{path: {type: PathPrefix, value: "/api/users"}}]
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: full-allow-backend-safe
+  namespace: ns-linkerd
+spec:
+  targetRef: {group: policy.linkerd.io, kind: HTTPRoute, name: full-backend-safe-route}
+  requiredAuthenticationRefs: [{name: full-allow-all-ips, kind: NetworkAuthentication, group: policy.linkerd.io}]
+
+# --- AUDIT-LOGGER (Port 8080) ---
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: full-audit-8080
+  namespace: ns-linkerd
+spec:
+  podSelector: {matchLabels: {app: audit-logger}}
+  port: 8080
+  proxyProtocol: HTTP/1
+  accessPolicy: deny
+---
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: full-audit-safe-route
+  namespace: ns-linkerd
+spec:
+  parentRefs: [{name: full-audit-8080, kind: Server, group: policy.linkerd.io}]
+  rules:
+    - matches: [{path: {type: PathPrefix, value: "/log"}, method: POST}]
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: full-allow-audit-safe
+  namespace: ns-linkerd
+spec:
+  targetRef: {group: policy.linkerd.io, kind: HTTPRoute, name: full-audit-safe-route}
+  requiredAuthenticationRefs: [{name: full-allow-all-ips, kind: NetworkAuthentication, group: policy.linkerd.io}]
+
+# --- PAYMENT-SERVICE (Port 8080) ---
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: full-payment-8080
+  namespace: ns-linkerd
+spec:
+  podSelector: {matchLabels: {app: payment-service}}
+  port: 8080
+  proxyProtocol: HTTP/1
+  accessPolicy: deny
+---
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: full-payment-safe-route
+  namespace: ns-linkerd
+spec:
+  parentRefs: [{name: full-payment-8080, kind: Server, group: policy.linkerd.io}]
+  rules:
+    - matches: [{path: {type: PathPrefix, value: "/process"}}]
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: full-allow-payment-safe
+  namespace: ns-linkerd
+spec:
+  targetRef: {group: policy.linkerd.io, kind: HTTPRoute, name: full-payment-safe-route}
+  requiredAuthenticationRefs: [{name: full-allow-all-ips, kind: NetworkAuthentication, group: policy.linkerd.io}]
+
+# --- REDIS (Port 6379) ---
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: full-redis-6379
+  namespace: ns-linkerd
+spec:
+  podSelector: {matchLabels: {app: redis}}
+  port: 6379
+  proxyProtocol: opaque
+  accessPolicy: deny # FORCE DENY
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: full-redis-allow-backend
+  namespace: ns-linkerd
+spec:
+  targetRef: {group: policy.linkerd.io, kind: Server, name: full-redis-6379}
+  requiredAuthenticationRefs: [{name: full-backend-api-auth, kind: MeshTLSAuthentication, group: policy.linkerd.io}]

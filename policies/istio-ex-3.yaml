@@ -1,0 +1,13 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: audit-logger-timeouts
+  namespace: ns-istio
+spec:
+  hosts:
+  - audit-logger
+  http:
+  - timeout: 2s # Pure L7 Timeout: Termination at the proxy based on request duration
+    route:
+    - destination:
+        host: audit-logger

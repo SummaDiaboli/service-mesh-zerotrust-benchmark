@@ -1,0 +1,81 @@
+# 1. Identity Protection (IP-1) & Method Block (HTTP-2) for audit-logger
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: full-audit-protection
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: audit-logger
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: ["ns-istio"]
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/log"]
+            ports: ["8080"]
+    - from:
+        - source:
+            principals: ["cluster.local/ns/ns-istio/sa/audit-logger"]
+      to:
+        - operation:
+            methods: ["DELETE"]
+            paths: ["/logs"]
+            ports: ["8080"]
+---
+# 2. Path Protection (HTTP-1) for backend-api
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: full-backend-path-block
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: backend-api
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths: ["/api/internal/secrets"]
+            ports: ["3000"]
+---
+# 3. Header Protection (HTTP-3) for payment-service
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: full-payment-header-block
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: payment-service
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths: ["/admin/keys"]
+            ports: ["8080"]
+---
+# 4. Data Protection (DB-1) for Redis
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: full-redis-l4-policy
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/ns-istio/sa/backend-api"]
+      to:
+        - operation:
+            ports: ["6379"]

@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-logger
+  labels:
+    app: audit-logger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: audit-logger
+  template:
+    metadata:
+      labels:
+        app: audit-logger
+    spec:
+      serviceAccountName: audit-logger
+      containers:
+        - name: audit-logger
+          image: thesis-audit-logger:latest # Matches your build tag
+          imagePullPolicy: Never # Forces local Minikube image
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "48Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: audit-logger
+spec:
+  selector:
+    app: audit-logger
+  ports:
+    - name: http
+      port: 80 # Service Port
+      targetPort: 8080 # Container Port

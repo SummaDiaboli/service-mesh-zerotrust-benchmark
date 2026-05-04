@@ -1,0 +1,15 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: block-refund-method
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: payment-service
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/payment.Service/Refund"]

@@ -1,0 +1,58 @@
+# 1. Define the Server for payment-service (Port 8080)
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: payment-8080
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: payment-service
+  port: 8080
+  proxyProtocol: HTTP/1
+---
+# 2. Define the "Safe" Route (/process)
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: payment-process-route
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: payment-8080
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/process"
+---
+# 3. AUTHORIZE the "Safe" Route
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-process-mesh
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: payment-process-route
+  requiredAuthenticationRefs:
+    - name: any-mesh-identity
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+# 4. Identity for mesh traffic
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: any-mesh-identity
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "*"
+# Note: By NOT defining an HTTPRoute or AuthorizationPolicy for /admin/keys,
+# Linkerd will return 404/403 once the Server is defined (Default Deny).
+# This provides protection, but NOT cryptographic JWT validation.

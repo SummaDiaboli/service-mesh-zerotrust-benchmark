@@ -1,0 +1,54 @@
+# 1. Server definition (The mandatory L4 anchor for L7 routes)
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: payment-http-80
+  namespace: ns-linkerd
+spec:
+  podSelector:
+    matchLabels:
+      app: payment-service
+  port: 80
+  proxyProtocol: HTTP/1
+---
+# 2. Pure L7 Route (Authorize only the safe path)
+apiVersion: policy.linkerd.io/v1beta3
+kind: HTTPRoute
+metadata:
+  name: payment-process-only
+  namespace: ns-linkerd
+spec:
+  parentRefs:
+    - name: payment-http-80
+      kind: Server
+      group: policy.linkerd.io
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/process"
+---
+# 3. Authorization for the L7 Route
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-process-only
+  namespace: ns-linkerd
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: HTTPRoute
+    name: payment-process-only
+  requiredAuthenticationRefs:
+    - name: any-mesh-identity
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: any-mesh-identity
+  namespace: ns-linkerd
+spec:
+  identities:
+    - "*"

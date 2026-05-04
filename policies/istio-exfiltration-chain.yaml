@@ -1,0 +1,49 @@
+# 1. Block Internal Secrets (HTTP-1)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: chain-block-secrets
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: backend-api
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths: ["/api/internal/secrets"]
+---
+# 2. Block External Egress (EX-1)
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: chain-google-entry
+  namespace: ns-istio
+spec:
+  hosts:
+  - google.com
+  ports:
+  - number: 80
+    name: http
+    protocol: HTTP
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: chain-block-egress
+  namespace: ns-istio
+spec:
+  hosts:
+  - google.com
+  http:
+  - fault:
+      abort:
+        httpStatus: 403
+        percentage:
+          value: 100
+    route:
+    - destination:
+        host: google.com

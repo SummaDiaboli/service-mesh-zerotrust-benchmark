@@ -1,0 +1,27 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: block-ip-spoofing
+  namespace: ns-istio
+spec:
+  selector:
+    matchLabels:
+      app: audit-logger
+  action: ALLOW
+  rules:
+    # Rule 1: Allow legitimate logging (POST) from anywhere in the mesh
+    - from:
+        - source:
+            namespaces: ["ns-istio"]
+      to:
+        - operation:
+            methods: ["POST"]
+            paths: ["/log"]
+    # Rule 2: Allow DELETE only if the identity matches the audit-logger itself (Loopback/Local)
+    - from:
+        - source:
+            principals: ["cluster.local/ns/ns-istio/sa/audit-logger"] 
+      to:
+        - operation:
+            methods: ["DELETE"]
+            paths: ["/logs"]
