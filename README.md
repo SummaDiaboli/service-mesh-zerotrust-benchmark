@@ -21,6 +21,7 @@ Link to published thesis: *to be added on publication*
 | Linkerd | edge-26.1.4 |
 | Frontend | React v19.2.0, Vite v7.2.4, Tailwind CSS v4.1.18 |
 | Backend API | Node.js v20.20.0 (Express) |
+| Payment Service | Node.js v20.20.0 (Express) |
 | Audit Logger | Go v1.23 (Fiber) |
 | Database | Redis v7.x (alpine) |
 | Package manager | pnpm |
@@ -32,7 +33,8 @@ Link to published thesis: *to be added on publication*
 ```
 .
 ├── audit-logger/             # Go/Fiber audit logging service
-├── backend/                  # Node.js/Express API and payment service
+├── backend/                  # Node.js/Express backend API
+├── payment-service/          # Node.js/Express payment service
 ├── frontend/                 # React/Vite frontend
 ├── k8s/                      # Kubernetes manifests
 │   ├── api-deployment.yaml
@@ -113,6 +115,7 @@ Images must be built into Minikube's Docker daemon:
 eval $(minikube docker-env)
 
 docker build -t thesis-backend:latest ./backend
+docker build -t thesis-payment:latest ./payment-service
 docker build -t thesis-audit:latest ./audit-logger
 docker build -t thesis-frontend:latest ./frontend
 ```
